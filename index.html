@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeBuddy - 小朋友学编程</title>
+    <script src="https://unpkg.com/blockly@10.4.3/blockly.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .header { background: rgba(255,255,255,0.95); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .logo { display: flex; align-items: center; gap: 10px; font-size: 24px; font-weight: bold; color: #667eea; }
+        .progress-bar { width: 200px; height: 10px; background: #e0e0e0; border-radius: 5px; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); transition: width 0.3s; }
+        .main-container { display: flex; height: calc(100vh - 70px); }
+        .tutorial-panel { width: 300px; background: white; padding: 20px; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.1); }
+        .tutorial-panel h2 { color: #333; margin-bottom: 15px; font-size: 18px; }
+        .step-card { background: #f8f9fa; border-radius: 12px; padding: 15px; margin-bottom: 15px; border-left: 4px solid #667eea; cursor: pointer; transition: all 0.3s; }
+        .step-card:hover { transform: translateX(5px); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .step-card.active { background: linear-gradient(135deg, #667eea20, #764ba220); border-color: #667eea; }
+        .step-card.completed { border-color: #28a745; opacity: 0.7; }
+        .step-number { display: inline-block; width: 28px; height: 28px; background: #667eea; color: white; border-radius: 50%; text-align: center; line-height: 28px; font-size: 14px; margin-right: 10px; }
+        .step-title { font-weight: 600; color: #333; }
+        .step-desc { font-size: 13px; color: #666; margin-top: 5px; margin-left: 38px; }
+        .workspace { flex: 1; display: flex; flex-direction: column; }
+        .toolbar { background: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e0e0e0; }
+        .toolbar-title { font-size: 16px; color: #333; font-weight: 600; }
+        .toolbar-actions { display: flex; gap: 10px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 25px; cursor: pointer; font-weight: 600; transition: all 0.3s; }
+        .btn-run { background: #28a745; color: white; }
+        .btn-run:hover { background: #218838; transform: scale(1.05); }
+        .btn-reset { background: #dc3545; color: white; }
+        .btn-hint { background: #ffc107; color: #333; }
+        .workspace-area { flex: 1; display: flex; overflow: hidden; }
+        #blocklyDiv { flex: 1; min-width: 400px; }
+        .stage-panel { width: 380px; background: white; border-left: 1px solid #e0e0e0; display: flex; flex-direction: column; padding: 20px; }
+        .stage-container { height: 360px; background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%); position: relative; overflow: hidden; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .grid-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 50px 50px; pointer-events: none; }
+        .character { position: absolute; font-size: 48px; transition: all 0.3s ease; z-index: 10; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
+        .target { position: absolute; font-size: 36px; animation: bounce 1s infinite; z-index: 5; }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .hint-box { margin-top: 15px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 8px; }
+        .hint-box strong { color: #856404; }
+        .console-panel { margin-top: 15px; background: #1e1e1e; color: #d4d4d4; padding: 15px; font-family: 'Consolas', monospace; font-size: 13px; overflow-y: auto; border-radius: 8px; height: 120px; }
+        .console-success { color: #4ec9b0; }
+        .console-error { color: #f48771; }
+        .console-info { color: #9cdcfe; }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+        .modal-content { background: white; padding: 40px; border-radius: 20px; text-align: center; max-width: 450px; animation: modalPop 0.3s ease; }
+        @keyframes modalPop { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .success-emoji { font-size: 80px; margin-bottom: 15px; }
+        .hidden { display: none !important; }
+        .guide-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+        .guide-box { background: white; padding: 30px; border-radius: 15px; max-width: 500px; text-align: center; }
+        .guide-box h3 { color: #667eea; margin-bottom: 15px; font-size: 24px; }
+        .guide-steps { text-align: left; background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
+        .guide-step { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+        .guide-step-num { width: 28px; height: 28px; background: #667eea; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <!-- 新手引导 -->
+    <div id="guideModal" class="guide-overlay">
+        <div class="guide-box">
+            <h3>🎮 欢迎来到 CodeBuddy!</h3>
+            <p>不用打字，像搭积木一样学习编程。</p>
+            <div class="guide-steps">
+                <div class="guide-step"><span class="guide-step-num">1</span><span>从<strong>左侧</strong>拖动积木到中间</span></div>
+                <div class="guide-step"><span class="guide-step-num">2</span><span>把它们<strong>连起来</strong></span></div>
+                <div class="guide-step"><span class="guide-step-num">3</span><span>点击<strong>运行</strong>看效果</span></div>
+                <div class="guide-step"><span class="guide-step-num">4</span><span>到达<strong>目标位置</strong>就过关！</span></div>
+            </div>
+            <button class="btn btn-run" style="font-size: 16px; padding: 12px 40px;" onclick="closeGuide()">🚀 开始编程之旅</button>
+        </div>
+    </div>
+
+    <!-- 成功弹窗 -->
+    <div id="successModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="success-emoji">🎉</div>
+            <h2>太棒了！</h2>
+            <p id="successText">你成功完成了这个任务！</p>
+            <button class="btn btn-run" style="margin-right: 10px;" onclick="nextLevel()">下一关 ➡️</button>
+            <button class="btn btn-reset" onclick="retryLevel()">🔄 再玩一次</button>
+        </div>
+    </div>
+
+    <div class="header">
+        <div class="logo">🐱 CodeBuddy</div>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <span style="color: #666; font-size: 14px;">完成进度</span>
+            <div class="progress-bar"><div class="progress-fill" id="progressBar" style="width: 0%"></div></div>
+            <span id="progressText" style="color: #667eea; font-weight: bold;">0/8</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="tutorial-panel">
+            <h2>📚 关卡列表</h2>
+            <div id="levelList"></div>
+        </div>
+
+        <div class="workspace">
+            <div class="toolbar">
+                <div class="toolbar-title" id="currentTitle">第1关：小猫向右走</div>
+                <div class="toolbar-actions">
+                    <button class="btn btn-hint" onclick="showHint()">💡 提示</button>
+                    <button class="btn btn-reset" onclick="resetCode()">🔄 重置</button>
+                    <button class="btn btn-run" onclick="runCode()">▶️ 运行</button>
+                </div>
+            </div>
+
+            <div class="workspace-area">
+                <div id="blocklyDiv"></div>
+                <div class="stage-panel">
+                    <div class="stage-container" id="stageArea">
+                        <div class="grid-overlay"></div>
+                        <div class="character" id="character">🐱</div>
+                        <div class="target" id="target">🐟</div>
+                    </div>
+                    <div class="hint-box">
+                        <strong>💡 当前任务：</strong>
+                        <div id="taskHint">拖动"向右移动"积木，让小猫走到小鱼的位置</div>
+                    </div>
+                    <div class="console-panel" id="consoleOutput">
+                        <div class="console-info">👋 你好！拖动积木，点击运行吧！</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 动态工具箱 -->
+    <xml id="toolbox" style="display: none"></xml>
+
+    <script>
+        // ==================== 游戏数据 ====================
+        let currentLevel = 0;
+        let workspace = null;
+        let characterPos = { x: 50, y: 155 };
+        let completedLevels = [];
+
+        const levels = [
+            {
+                id: 1,
+                title: "小猫向右走",
+                desc: "学习最基础的移动",
+                hint: "拖动'向右移动'积木，让小猫走到小鱼的位置",
+                target: { x: 250, y: 155 },
+                character: { x: 50, y: 155, emoji: "🐱" },
+                goal: "🐱 → 🐟",
+                blocks: ['move_right']
+            },
+            {
+                id: 2,
+                title: "收集星星",
+                desc: "使用重复指令",
+                hint: "试试用'重复3次'积木，里面放'向右移动'",
+                target: { x: 250, y: 155 },
+                character: { x: 50, y: 155, emoji: "🐱" },
+                goal: "用最少的积木到达⭐",
+                blocks: ['move_right', 'repeat_times']
+            },
+            {
+                id: 3,
+                title: "绕个弯",
+                desc: "组合多个方向",
+                hint: "先向右，再向下，最后向右",
+                target: { x: 250, y: 250 },
+                character: { x: 50, y: 50, emoji: "🐶" },
+                goal: "绕过障碍到达终点",
+                blocks: ['move_right', 'move_down', 'move_left', 'move_up']
+            },
+            {
+                id: 4,
+                title: "正方形路线",
+                desc: "画一个正方形",
+                hint: "右→下→左→上，回到起点",
+                target: { x: 50, y: 50 },
+                character: { x: 50, y: 50, emoji: "🐰" },
+                goal: "走一圈回到原位",
+                blocks: ['move_right', 'move_down', 'move_left', 'move_up', 'repeat_times']
+            },
+            {
+                id: 5,
+                title: "变身小青蛙",
+                desc: "学习改变外观",
+                hint: "先用'变成青蛙'，再跳到荷叶上",
+                target: { x: 200, y: 200 },
+                character: { x: 50, y: 50, emoji: "🐱" },
+                goal: "变身并到达目的地",
+                blocks: ['move_right', 'move_down', 'change_emoji']
+            },
+            {
+                id: 6,
+                title: "打招呼",
+                desc: "学会说话",
+                hint: "移动之前先说句话",
+                target: { x: 250, y: 155 },
+                character: { x: 50, y: 155, emoji: "🐻" },
+                goal: "边走边打招呼",
+                blocks: ['move_right', 'say_something']
+            },
+            {
+                id: 7,
+                title: "耐心等待",
+                desc: "学会等待",
+                hint: "每走一步等一等",
+                target: { x: 250, y: 155 },
+                character: { x: 50, y: 155, emoji: "🐢" },
+                goal: "慢慢走到终点",
+                blocks: ['move_right', 'wait_seconds', 'repeat_times']
+            },
+            {
+                id: 8,
+                title: "大冒险",
+                desc: "综合运用所有技能",
+                hint: "变身→移动→说话→等待，展示你的全部本领！",
+                target: { x: 250, y: 250 },
+                character: { x: 50, y: 50, emoji: "🚀" },
+                goal: "完成最终挑战",
+                blocks: ['move_right', 'move_down', 'move_left', 'move_up', 'repeat_times', 'wait_seconds', 'change_emoji', 'say_something', 'play_sound']
+            }
+        ];
+
+        // 所有可用的积木定义
+        const blockDefinitions = {
+            move_right: {
+                init: function() {
+                    this.appendDummyInput()
+                        .appendField("➡️ 向右移动")
+                        .appendField(new Blockly.FieldNumber(50, 10, 300, 10), "STEPS")
+                        .appendField("步");
+                    this.setPreviousStatement(true);
+                    this.setNextStatement(true);
+                    this.setColour(210);
+                },
+                generator: function(block) {
+                    return 'await window.game.move(' + block.getFieldValue('STEPS') + ', 0);\n';
+                }
+            },
+            move_left: {
+                init: function() {
+                    this.appendDummyInput()
+                        .appendField("⬅️ 向左移动")
+                        .appendField(new Blockly.FieldNumber(50, 10, 300, 10), "STEPS")
+                        .appendField("步");
+                    this.setPreviousStatement(true);
+                    this.setNextStatement(true);
+                    this.setColour(210);
+                },
+                generator: function(block) {
+                    return 'await window.game.move(-' + block.getFieldValue('STEPS') + ', 0);\n';
+                }
+            },
+            move_up: {
+                init: function() {
+                    this.appendDummyInput()
+                        .appendField("⬆️ 向上移动")
+                        .appendField(new Blockly.FieldNumber(50, 10, 300, 10), "STEPS")
+                        .appendField("步");
+                    this.setPreviousStatement(true);
+                    this.setNextStatement(true);
+                    this.setColour(210);
+                },
+                generator: function(block) {
+                    return 'await window.game.move(0, -' + block.getFieldValue('STEPS') + ');\n';
+                }
+            },
+            move_down: {
+                init: function() {
+                    this.appendDummyInput()
+                        .appendField("⬇️ 向下移动")
+                        .appendField(new Blockly.FieldNumber(50, 10, 300, 10), "STEPS")
+                        .appendField("步");
+                    this.setPreviousStatement(true);
+                    this.setNextStatement(true);
+                    this.setColour(210);
+                },
+                generator: function(block) {
+                    return 'await window.game.move(0, ' + block.getFieldValue('STEPS') + ');\n';
+                }
+            },
+            repeat_times: {
+                init: function() {
+                    this.appendDummyInput().appendField("🔁 重复").appendField(new Blockly.FieldNumber(3, 1, 10, 1), "TIMES").appendField("次");
+                    this.appendStatementInput("DO").setCheck(null).appendField("执行");
+                    this.setPreviousStatement(true);
+                    this.setNextStatement(true);
+                    this.setColour(120);
+                },
+                generator: function(block) {
+                    var times = block.getFieldValue('TIMES');
+                    var branch = Blockly.JavaScript.statementToCode(block, 'DO');
+                    return 'for (var i = 0; i < ' + times + '; i++) {\n' + branch + '}\n';
+                }
+            },
+            wait_seconds: {
+                init: function() {
+                    this.appendDummyInput()
+                        .appendField("⏱️ 等待")
+                        .appendField(new Blockly.FieldNumber(1, 0.5, 5, 0.5), "SECONDS")
+                        .appendField("秒");
+                    this.setPreviousStatement(true);
+                    this.setNextStatement(true);
+                    this.setColour(120);
+                },
+                generator: function(block) {
+                    return 'await window.game.wait(' + block.getFieldValue('SECONDS') + ');\n';
+                }
+            },
+            change_emoji: {
+                init: function() {
+                    this.appendDummyInput()
+                        .appendField("😊 变成")
+                        .appendField(new Blockly.FieldDropdown([
+                            ["🐸 青蛙", "🐸"],
+                            ["🐶 小狗", "🐶"],
+                            ["🐰 兔子", "🐰"],
+                            ["🐻 小熊", "🐻"],
+                            ["🦋 蝴蝶", "🦋"],
+                            ["🚀 火箭", "🚀"]
+                        ]), "EMOJI");
+                    this.setPreviousStatement(true);
+                    this.setNextStatement(true);
+                    this.setColour(260);
+                },
+                generator: function(block) {
+                    return 'window.game.setEmoji("' + block.getFieldValue('EMOJI') + '");\n';
+                }
+            },
+            say_something: {
+                init: function() {
+                    this.appendDummyInput()
+                        .appendField("💬 说")
+                        .appendField(new Blockly.FieldTextInput("你好！"), "TEXT");
+                    this.setPreviousStatement(true);
+                    this.setNextStatement(true);
+                    this.setColour(260);
+                },
+                generator: function(block) {
+                    return 'window.game.say("' + block.getFieldValue('TEXT') + '");\n';
+                }
+            },
+            play_sound: {
+                init: function() {
+                    this.appendDummyInput()
+                        .appendField("🎵 播放")
+                        .appendField(new Blockly.FieldDropdown([
+                            ["喵~", "meow"],
+                            ["汪！", "woof"],
+                            ["叮咚", "ding"],
+                            ["胜利音乐", "win"]
+                        ]), "SOUND");
+                    this.setPreviousStatement(true);
+                    this.setNextStatement(true);
+                    this.setColour(290);
+                },
+                generator: function(block) {
+                    return 'window.game.playSound("' + block.getFieldValue('SOUND') + '");\n';
+                }
+            }
+        };
+
+        // ==================== 初始化积木 ====================
+        function initBlocksForLevel(levelIndex) {
+            const level = levels[levelIndex];
+            const availableBlocks = level.blocks;
+            
+            // 清空之前的定义
+            Blockly.Blocks = {};
+            Blockly.JavaScript = {};
+            
+            // 只注册当前关卡需要的积木
+            availableBlocks.forEach(blockName => {
+                const def = blockDefinitions[blockName];
+                if (def) {
+                    Blockly.Blocks[blockName] = { init: def.init };
+                    Blockly.JavaScript[blockName] = def.generator;
+                }
+            });
+            
+            // 重新生成工具箱
+            generateToolbox(availableBlocks);
+        }
+
+        function generateToolbox(availableBlocks) {
+            const toolbox = document.getElementById('toolbox');
+            toolbox.innerHTML = '';
+            
+            const categories = {
+                move: { name: '🚀 移动', colour: 210, blocks: ['move_right', 'move_left', 'move_up', 'move_down'] },
+                control: { name: '🔁 控制', colour: 120, blocks: ['repeat_times', 'wait_seconds'] },
+                look: { name: '👀 外观', colour: 260, blocks: ['change_emoji', 'say_something'] },
+                sound: { name: '🎵 声音', colour: 290, blocks: ['play_sound'] }
+            };
+            
+            for (const [catKey, catData] of Object.entries(categories)) {
+                const catBlocks = catData.blocks.filter(b => availableBlocks.includes(b));
+                if (catBlocks.length > 0) {
+                    const category = document.createElement('category');
+                    category.setAttribute('name', catData.name);
+                    category.setAttribute('colour', catData.colour);
+                    
+                    catBlocks.forEach(blockName => {
+                        const block = document.createElement('block');
+                        block.setAttribute('type', blockName);
+                        category.appendChild(block);
+                    });
+                    
+                    toolbox.appendChild(category);
+                }
+            }
+        }
+
+        // ==================== 游戏API ====================
+        window.game = {
+            move: async function(dx, dy) {
+                characterPos.x += dx;
+                characterPos.y += dy;
+                characterPos.x = Math.max(0, Math.min(310, characterPos.x));
+                characterPos.y = Math.max(0, Math.min(310, characterPos.y));
+                document.getElementById('character').style.left = characterPos.x + 'px';
+                document.getElementById('character').style.top = characterPos.y + 'px';
+                log('移动了 (' + dx + ', ' + dy + ')', 'success');
+                await new Promise(r => setTimeout(r, 300));
+                checkWin();
+            },
+            wait: async function(seconds) {
+                log('等待 ' + seconds + ' 秒...', 'info');
+                await new Promise(r => setTimeout(r, seconds * 1000));
+            },
+            setEmoji: function(emoji) {
+                document.getElementById('character').textContent = emoji;
+                log('变成了 ' + emoji, 'success');
+            },
+            say: function(text) {
+                log('说: "' + text + '" 💬', 'success');
+            },
+            playSound: function(sound) {
+                log('播放: ' + sound + ' 🎵', 'success');
+            }
+        };
+
+        // ==================== 核心功能 ====================
+        function initWorkspace() {
+            initBlocksForLevel(0);
+            workspace = Blockly.inject('blocklyDiv', {
+                toolbox: document.getElementById('toolbox'),
+                grid: { spacing: 20, length: 3, colour: '#ccc', snap: true },
+                zoom: { controls: true, wheel: true, startScale: 1 },
+                trashcan: true
+            });
+            loadLevel(0);
+        }
+
+        function loadLevel(index) {
+            currentLevel = index;
+            const level = levels[index];
+            
+            // 更新该关卡的积木
+            initBlocksForLevel(index);
+            if (workspace) {
+                workspace.updateToolbox(document.getElementById('toolbox'));
+                workspace.clear();
+            }
+            
+            document.getElementById('currentTitle').textContent = '第' + level.id + '关：' + level.title;
+            document.getElementById('taskHint').textContent = level.hint;
+            
+            characterPos = { x: level.character.x, y: level.character.y };
+            document.getElementById('character').style.left = characterPos.x + 'px';
+            document.getElementById('character').style.top = characterPos.y + 'px';
+            document.getElementById('character').textContent = level.character.emoji;
+            
+            document.getElementById('target').style.left = level.target.x + 'px';
+            document.getElementById('target').style.top = level.target.y + 'px';
+            document.getElementById('target').textContent = index === 1 ? '⭐' : (index === 7 ? '🏆' : '🐟');
+            
+            renderLevels();
+            updateProgress();
+        }
+
+        function renderLevels() {
+            const list = document.getElementById('levelList');
+            list.innerHTML = levels.map((level, index) => `
+                <div class="step-card ${index === currentLevel ? 'active' : ''} ${completedLevels.includes(index) ? 'completed' : ''}" 
+                     onclick="selectLevel(${index})">
+                    <span class="step-number">${completedLevels.includes(index) ? '✓' : level.id}</span>
+                    <span class="step-title">${level.title}</span>
+                    <div class="step-desc">${level.desc}</div>
+                </div>
+            `).join('');
+        }
+
+        function selectLevel(index) {
+            if (index > currentLevel && !completedLevels.includes(index - 1)) {
+                log('请先完成前面的关卡！', 'error');
+                return;
+            }
+            loadLevel(index);
+            log('切换到第' + (index + 1) + '关', 'info');
+        }
+
+        function updateProgress() {
+            const progress = (completedLevels.length / levels.length) * 100;
+            document.getElementById('progressBar').style.width = progress + '%';
+            document.getElementById('progressText').textContent = completedLevels.length + '/' + levels.length;
+        }
+
+        function checkWin() {
+            const level = levels[currentLevel];
+            const distance = Math.abs(characterPos.x - level.target.x) + Math.abs(characterPos.y - level.target.y);
+            
+            if (distance < 30) {
+                if (!completedLevels.includes(currentLevel)) {
+                    completedLevels.push(currentLevel);
+                }
+                setTimeout(() => {
+                    document.getElementById('successModal').classList.remove('hidden');
+                    document.getElementById('successText').textContent = 
+                        currentLevel === levels.length - 1 ? 
+                        '恭喜你完成了所有挑战！你是编程小达人！🏆' : 
+                        '你成功完成了第' + (currentLevel + 1) + '关！';
+                }, 300);
+            }
+        }
+
+        async function runCode() {
+            if (!workspace) return;
+            
+            const code = Blockly.JavaScript.workspaceToCode(workspace);
+            console.log('生成的代码:', code);
+            
+            if (!code.trim()) {
+                log('请先拖动一些积木到工作区！', 'error');
+                return;
+            }
+
+            log('🚀 开始运行程序...', 'info');
+            
+            try {
+                const fn = eval('(async function() { ' + code + ' })');
+                await fn();
+                log('✅ 程序运行完成！', 'success');
+            } catch (err) {
+                log('❌ 错误: ' + err.message, 'error');
+                console.error(err);
+            }
+        }
+
+        function resetCode() {
+            if (workspace) workspace.clear();
+            const level = levels[currentLevel];
+            characterPos = { x: level.character.x, y: level.character.y };
+            document.getElementById('character').style.left = characterPos.x + 'px';
+            document.getElementById('character').style.top = characterPos.y + 'px';
+            document.getElementById('character').textContent = level.character.emoji;
+            log('已重置', 'info');
+        }
+
+        function nextLevel() {
+            document.getElementById('successModal').classList.add('hidden');
+            if (currentLevel < levels.length - 1) {
+                loadLevel(currentLevel + 1);
+            } else {
+                log('🎉 恭喜通关！你可以重新挑战任意关卡', 'success');
+            }
+        }
+
+        function retryLevel() {
+            document.getElementById('successModal').classList.add('hidden');
+            resetCode();
+        }
+
+        function showHint() {
+            alert('💡 提示：\n\n' + levels[currentLevel].hint);
+        }
+
+        function closeGuide() {
+            document.getElementById('guideModal').classList.add('hidden');
+        }
+
+        function log(message, type) {
+            const consoleEl = document.getElementById('consoleOutput');
+            const div = document.createElement('div');
+            div.className = type === 'success' ? 'console-success' : type === 'error' ? 'console-error' : type === 'info' ? 'console-info' : '';
+            div.textContent = '> ' + message;
+            consoleEl.appendChild(div);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        window.onload = initWorkspace;
+    </script>
+</body>
+</html>
